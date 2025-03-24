@@ -1,0 +1,162 @@
+async function getOpenAIResponse(promptText: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4",
+      messages: [{ role: "user", content: promptText }]
+    })
+  });
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+async function upsertPinecone(vector: number[], id: string, metadata: any): Promise<void> {
+  await fetch(`${PINECONE_INDEX_URL}/vectors/upsert`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Api-Key": PINECONE_API_KEY
+    },
+    body: JSON.stringify({
+      vectors: [{
+        id: id,
+        values: vector,
+        metadata: metadata
+      }]
+    })
+  });
+}
+
+async function queryPinecone(vector: number[]): Promise<any> {
+  const response = await fetch(`${PINECONE_INDEX_URL}/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Api-Key": PINECONE_API_KEY
+    },
+    body: JSON.stringify({
+      vector: vector,
+      topK: 5,
+      includeMetadata: true
+    })
+  });
+  return await response.json();
+}
+
+async function stringToVector(text: string): Promise<number[]> {
+  const response = await fetch("https://api.openai.com/v1/embeddings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model: "text-embedding-ada-002",
+      input: text
+    })
+  });
+  const data = await response.json();
+  return data.data[0].embedding;
+}
+
+
+class ChatBot {
+  name: string;
+  userId: string = '';
+  userName: string = '';
+  userType: string = '';
+
+  constructor(name: string) {
+    this.name = name;
+  }
+
+  async askQuestions(): Promise<void> {
+    this.userName = prompt("Enter your name and surname:") || "";
+    const questions = [
+      "Do you prefer spending time alone or with a group?",
+      "Do you make decisions based on logic or feelings?",
+      "Do you prefer a structured schedule or spontaneous events?",
+      "Are you more interested in abstract ideas or concrete details?",
+      "Do you tend to focus on the present moment or future possibilities?",
+    ];
+    let answers = "";
+    for (let q of questions) {
+      const ans = prompt(q) || "";
+      answers += `${q} ${ans}\n`;
+    }
+    const promptText = `Based on the following responses, determine the MBTI personality type (e.g., INTJ, ENFP) and provide only the type as the answer:\n${answers}`;
+    this.userType = (await getOpenAIResponse(promptText)).trim();
+    this.userId = Date.now().toString();
+    const vector = await stringToVector(this.userType);
+    await upsertPinecone(vector, this.userId, {
+      name: this.userName,
+      type: this.userType
+    });
+    alert(`Your personality type is: ${this.userType}`);
+  }
+
+  async findFriend(type: string): Promise<void> {
+    const MBTI_COMPATIBILITY: Record<string, string[]> = {
+      "INTJ": ["ENFP", "INFP"],
+      "INTP": ["ENTP", "ENFP"],
+      "ENTJ": ["INFP", "ISFP"],
+      "ENTP": ["INFJ", "INTP"],
+      "INFJ": ["ENFP", "ENTP"],
+      "INFP": ["ENFJ", "ENTJ"],
+      "ENFJ": ["INFP", "ISFP"],
+      "ENFP": ["INFJ", "INTJ"],
+      "ISTJ": ["ESFP", "ESTP"],
+      "ISFJ": ["ESFP", "ESTP"],
+      "ESTJ": ["ISFP", "ISTP"],
+      "ESFJ": ["ISFP", "ISTP"],
+      "ISTP": ["ESFJ", "ENFJ"],
+      "ISFP": ["ESTJ", "ESFJ"],
+      "ESTP": ["ISFJ", "ISTJ"],
+      "ESFP": ["ISFJ", "ISTJ"]
+    };
+
+    const compatibleTypes = MBTI_COMPATIBILITY[type] || [];
+    const allMatches: any[] = [];
+
+    for (const compatibleType of compatibleTypes) {
+      const vector = await stringToVector(compatibleType);
+      const result = await queryPinecone(vector);
+      const filtered = result.matches.filter(
+        (m: any) =>
+          m.id !== this.userId && m.metadata?.type === compatibleType
+      );
+      allMatches.push(...filtered);
+    }
+
+    if (allMatches.length > 0) {
+      const friends = allMatches
+        .map(m => `${m.metadata.name} (${m.metadata.type})`)
+        .join(", ");
+      alert(`Compatible friend(s): ${friends}`);
+    } else {
+      alert("No compatible friend match found.");
+    }
+  }
+
+  async startChat(): Promise<void> {
+    await this.askQuestions();
+    let input = prompt("Ask a question:") || "";
+    while (input.toLowerCase() !== "bye") {
+      if (input.toLowerCase() === "who is my friend?") {
+        await this.findFriend(this.userType);
+      } else {
+        const reply = await getOpenAIResponse(input);
+        alert(`${this.name}: ${reply}`);
+      }
+      input = prompt("Ask a question:") || "";
+    }
+    alert(`${this.name}: Goodbye!`);
+  }
+}
+
+const bot = new ChatBot("AI ChatBot");
+bot.startChat();
