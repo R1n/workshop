@@ -101,22 +101,22 @@ class ChatBot {
 
   async findFriend(type: string): Promise<void> {
     const MBTI_COMPATIBILITY: Record<string, string[]> = {
-      "INTJ": ["ENFP", "INFP"],
-      "INTP": ["ENTP", "ENFP"],
-      "ENTJ": ["INFP", "ISFP"],
-      "ENTP": ["INFJ", "INTP"],
-      "INFJ": ["ENFP", "ENTP"],
-      "INFP": ["ENFJ", "ENTJ"],
-      "ENFJ": ["INFP", "ISFP"],
-      "ENFP": ["INFJ", "INTJ"],
-      "ISTJ": ["ESFP", "ESTP"],
-      "ISFJ": ["ESFP", "ESTP"],
-      "ESTJ": ["ISFP", "ISTP"],
-      "ESFJ": ["ISFP", "ISTP"],
-      "ISTP": ["ESFJ", "ENFJ"],
-      "ISFP": ["ESTJ", "ESFJ"],
-      "ESTP": ["ISFJ", "ISTJ"],
-      "ESFP": ["ISFJ", "ISTJ"]
+    "INTJ": ["ENFP", "ENTP", "ESTP", "ESFP"],
+    "INTP": ["ENTP", "ENFP", "ESTJ", "ESFJ"],
+    "ENTJ": ["INFP", "ISFP", "INTJ", "ENTJ"],
+    "ENTP": ["INFJ", "INTP", "INTJ", "ENFP"],
+    "INFJ": ["ENFP", "ENTP", "ESTP", "ESFP"],
+    "INFP": ["ENFJ", "ENTJ", "INTJ", "INTP"],
+    "ENFJ": ["INFP", "ISFP", "INTJ", "ENTJ"],
+    "ENFP": ["INFJ", "INTJ", "ESTJ", "ESFJ"],
+    "ISTJ": ["ESFP", "ESTP", "ISFJ", "ISTJ"],
+    "ISFJ": ["ESFP", "ESTP", "ENTP", "INTP"],
+    "ESTJ": ["ISFP", "ISTP", "INTP", "INFP"],
+    "ESFJ": ["ISFP", "ISTP", "INTP", "INFP"],
+    "ISTP": ["ESFJ", "ENFJ", "ESTJ", "ENTJ"],
+    "ISFP": ["ESTJ", "ESFJ", "ENTJ", "ENFJ"],
+    "ESTP": ["ISFJ", "ISTJ", "INFJ", "INTJ"],
+    "ESFP": ["ISFJ", "ISTJ", "INFJ", "INTJ"]
     };
 
     const compatibleTypes = MBTI_COMPATIBILITY[type] || [];
@@ -143,18 +143,20 @@ class ChatBot {
   }
 
   async startChat(): Promise<void> {
+   if (prompt("Do you want to pass personality test? (yes/no)")?.toLowerCase() === "yes") {
     await this.askQuestions();
-    let input = prompt("Ask a question:") || "";
-    while (input.toLowerCase() !== "bye") {
-      if (input.toLowerCase() === "who is my friend?") {
-        await this.findFriend(this.userType);
-      } else {
-        const reply = await getOpenAIResponse(input);
-        alert(`${this.name}: ${reply}`);
-      }
-      input = prompt("Ask a question:") || "";
+  }
+  while (true) {
+    const input = prompt("Ask a question (or type 'bye' to exit):");
+    if (!input || input.toLowerCase() === "bye") break;
+    if (input.toLowerCase() === "who is my friend?") {
+      await this.findFriend(this.userType);
+    } else {
+      const reply = await getOpenAIResponse(input);
+      alert(`${this.userName}: ${reply}`);
     }
-    alert(`${this.name}: Goodbye!`);
+  }
+  alert(`${this.userName}: Goodbye!`);
   }
 }
 
